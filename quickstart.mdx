@@ -1,47 +1,48 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: Quickstart
+description: Make your first OnePanel API request.
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+## 1. Create an API key
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+Sign in to OnePanel, open **Settings → API keys**, and create a key. The raw key is shown once, so store it in a server-side secret manager.
 
-## Prerequisites
+<Warning>
+  Never put an API key in browser JavaScript, mobile app source, a public repository, or a client-visible URL.
+</Warning>
 
-Before you begin, you must have:
+## 2. List supported networks
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+```bash
+curl https://sffhehsa.onepanel.ng/api/v1/networks
+```
 
-## Get started
+## 3. Fetch a current catalog
 
-<Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+```bash
+curl "https://sffhehsa.onepanel.ng/api/v1/bundles?carrier=mtn"
+```
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+Use the returned `id` as the `plan_id` in a purchase request. Catalog IDs and prices can change.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+## 4. Purchase a plan
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
-</Steps>
+```bash
+curl -X POST https://sffhehsa.onepanel.ng/api/v1/purchase \
+  -H "Authorization: Bearer $ONEPANEL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "carrier": "mtn",
+    "plan_id": "1650",
+    "recipient": "07068765000"
+  }'
+```
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+Every successful purchase charges the configured flat platform fee of **₦2**. The account must have sufficient wallet balance and an active connected SIM for the selected carrier.
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+## 5. Check transaction history
+
+```bash
+curl https://sffhehsa.onepanel.ng/api/v1/transactions \
+  -H "Authorization: Bearer $ONEPANEL_API_KEY"
+```

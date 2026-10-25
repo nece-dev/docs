@@ -1,0 +1,32 @@
+---
+title: Authentication
+description: Authenticate requests with a OnePanel API key.
+---
+
+OnePanel supports API keys for server-to-server integrations. User JWTs are also accepted by dashboard-backed requests, but API keys are recommended for integrations.
+
+## API key header
+
+Send the key in the `X-API-Key` header:
+
+```http
+X-API-Key: qd_live_your_api_key
+```
+
+You can also use the bearer form:
+
+```http
+Authorization: Bearer qd_live_your_api_key
+```
+
+## Key management
+
+Create, list, and revoke keys from **Settings → API keys** in the OnePanel dashboard. Store keys as secrets and rotate them if they may have been exposed.
+
+<Check>
+  API keys are hashed before storage. The complete raw key is only returned at creation time.
+</Check>
+
+## Permissions and limits
+
+API keys currently operate with the permissions of their owning business account. Requests are rate limited; use exponential backoff for `429` responses and avoid retrying non-idempotent purchases blindly.

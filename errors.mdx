@@ -1,0 +1,27 @@
+---
+title: Errors
+description: Understand OnePanel API error responses.
+---
+
+Errors return a JSON object with a human-readable `message`:
+
+```json
+{
+  "message": "The selected plan is not available for this carrier"
+}
+```
+
+## Common status codes
+
+| Status | Meaning |
+| --- | --- |
+| `400` | Invalid request, carrier, phone number, or plan ID. |
+| `401` | Missing, invalid, revoked, or expired credentials. |
+| `402` | Insufficient wallet balance for the platform fee. |
+| `404` | The requested resource does not exist. |
+| `429` | Rate limit exceeded. Retry with backoff. |
+| `500` | Temporary server error. Retry only when the operation is safe to repeat. |
+
+<Warning>
+  A timeout after a purchase request does not prove that the purchase failed. Check `/transactions` before retrying to avoid duplicate purchases.
+</Warning>
