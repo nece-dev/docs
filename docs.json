@@ -24,16 +24,7 @@
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "OnePanel",
-          "href": "https://onepanel.ng",
-          "icon": "globe"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/logo/light.png",
