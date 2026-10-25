@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: API for OnePanel data vending and transaction management.
 servers:
-  - url: https://sffhehsa.onepanel.ng/api/v1
+  - url: https://api.onepanel.ng/api/v1
     description: Production
 tags:
   - name: Catalog

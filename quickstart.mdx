@@ -14,13 +14,13 @@ Sign in to OnePanel, open **Settings → API keys**, and create a key. The raw k
 ## 2. List supported networks
 
 ```bash
-curl https://sffhehsa.onepanel.ng/api/v1/networks
+curl https://api.onepanel.ng/api/v1/networks
 ```
 
 ## 3. Fetch a current catalog
 
 ```bash
-curl "https://sffhehsa.onepanel.ng/api/v1/bundles?carrier=mtn"
+curl "https://api.onepanel.ng/api/v1/bundles?carrier=mtn"
 ```
 
 Use the returned `id` as the `plan_id` in a purchase request. Catalog IDs and prices can change.
@@ -28,7 +28,7 @@ Use the returned `id` as the `plan_id` in a purchase request. Catalog IDs and pr
 ## 4. Purchase a plan
 
 ```bash
-curl -X POST https://sffhehsa.onepanel.ng/api/v1/purchase \
+curl -X POST https://api.onepanel.ng/api/v1/purchase \
   -H "Authorization: Bearer $ONEPANEL_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -43,6 +43,6 @@ Every successful purchase charges the configured flat platform fee of **₦2**. 
 ## 5. Check transaction history
 
 ```bash
-curl https://sffhehsa.onepanel.ng/api/v1/transactions \
+curl https://api.onepanel.ng/api/v1/transactions \
   -H "Authorization: Bearer $ONEPANEL_API_KEY"
 ```
