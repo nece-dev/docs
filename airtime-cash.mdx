@@ -1,0 +1,113 @@
+---
+title: Airtime for cash (MTN)
+description: Let your users sell airtime for cash inside your app. We move the airtime to your MTN SIM; you pay the user.
+---
+
+With this API your app can offer "airtime for cash". The user links their MTN line once, then each sale moves airtime from their line to **your connected MTN SIM**. You pay the user only after OnePanel confirms the airtime arrived.
+
+<Warning>
+  Only start a session after the user has agreed to let your business move airtime from their line. Send `consent: true` and keep your own record of the consent (pass its ID as `consent_ref`).
+</Warning>
+
+## Before you start
+
+1. Connect an MTN SIM in **My SIM Cards**. This is the SIM that receives the airtime.
+2. Open **Airtime Cash** in the dashboard and set your spending limits.
+3. Register a webhook if you want push notifications (see [Webhooks](#webhooks)).
+
+## The flow
+
+### 1. Start a session
+
+```bash
+curl -X POST https://api.onepanel.ng/api/v1/airtime-cash/sessions \
+  -H "X-API-Key: qd_live_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "msisdn": "08031234567", "consent": true, "consent_ref": "consent-8841" }'
+```
+
+The user receives an SMS code from MTN. The response contains a `session_id`.
+
+### 2. Verify the code
+
+```bash
+curl -X POST https://api.onepanel.ng/api/v1/airtime-cash/sessions/SESSION_ID/verify \
+  -H "X-API-Key: qd_live_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "otp": "123456" }'
+```
+
+The session is now `active`. **Store the `session_id` against this user.** OnePanel keeps their MTN login (encrypted) so the next sale needs no OTP.
+
+### 3. Transfer airtime
+
+```bash
+curl -X POST https://api.onepanel.ng/api/v1/airtime-cash/transfers \
+  -H "X-API-Key: qd_live_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "session_id": "SESSION_ID", "amount": 1000, "pin": "1234", "reference": "order-2026-0001" }'
+```
+
+- `pin` is the user's 4-digit MTN airtime-transfer PIN. Ask for it on every sale. OnePanel never stores it, and you should not either.
+- `reference` is your own unique ID. Sending the same reference again returns the original result and never transfers twice, so it is safe to retry after a network error.
+
+```json
+{
+  "success": true,
+  "transfer_id": "ACT_5d0c8b1e",
+  "reference": "order-2026-0001",
+  "status": "success",
+  "amount": 1000,
+  "message": "Yello, you have gifted N1000 to 2347075932191 ...",
+  "mtn_transaction_id": "7154604986731662"
+}
+```
+
+### 4. Credit the user
+
+Credit the user **only** when `status` is `success`.
+
+| `status` | HTTP | What to do |
+| --- | --- | --- |
+| `success` | 200 | Airtime received. Pay the user. |
+| `failed` | 422 | Nothing was sent. `message` is MTN's own reply (for example a wrong PIN). Do not pay. |
+| `pending` or `unknown` | 202 | The result is not confirmed. Do not pay and do not send again. Check `GET /airtime-cash/transfers/{reference}` or wait for the webhook. |
+
+## Sessions that need a new OTP
+
+If a user's MTN login can no longer be renewed, or the session has been unused for longer than your inactivity limit, the transfer returns **409** with `session_status` of `reauth_required` or `expired`. Nothing is sent. Start a new session for that number (steps 1 and 2) and use the new `session_id`.
+
+To stop a user's session yourself, call `DELETE /airtime-cash/sessions/{id}`. The stored MTN login is erased immediately.
+
+## Limits
+
+You set these in the dashboard or with `PUT /airtime-cash/settings`. Transfers that would break a limit are refused with **422** before anything is sent.
+
+| Limit | Default | Highest you can set |
+| --- | --- | --- |
+| Per transfer | ₦5,000 | ₦50,000 |
+| Per day, per user line | ₦20,000 | ₦100,000 |
+| Per day, all lines | ₦200,000 | ₦1,000,000 |
+| Session inactivity expiry | 30 days | 90 days |
+
+The minimum transfer is ₦50. Daily limits reset at midnight Nigerian time. Pending and unconfirmed transfers count toward them.
+
+<Note>
+  After 3 failed transfers on one session within an hour, further transfers on it return **429** for a while. This protects the user's PIN from being locked by MTN.
+</Note>
+
+## Webhooks
+
+If you have a webhook endpoint, OnePanel posts these events, signed like every other OnePanel webhook. Failed deliveries are retried automatically.
+
+| Event | When |
+| --- | --- |
+| `airtime_cash.transfer.success` | Airtime received. The payload is the transfer object. |
+| `airtime_cash.transfer.failed` | MTN refused the transfer. |
+| `sim.reauth_required` | A user's session can no longer be renewed. Ask them for a new OTP. |
+
+## Good to know
+
+- OnePanel never gives you the user's MTN token. You only ever hold a `session_id`.
+- Airtime transfers cannot be reversed. Only pay out on `success`.
+- Every OTP, transfer and revocation is recorded in an audit trail on our side.

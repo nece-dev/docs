@@ -16,7 +16,7 @@
         "groups": [
           {
             "group": "Start here",
-            "pages": ["index", "quickstart", "authentication", "errors"]
+            "pages": ["index", "quickstart", "authentication", "errors", "airtime-cash"]
           },
           {
             "group": "API reference",

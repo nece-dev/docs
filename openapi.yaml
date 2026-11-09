@@ -11,6 +11,7 @@ tags:
   - name: Purchases
   - name: Transactions
   - name: Account
+  - name: Airtime Cash
 paths:
   /networks:
     get:
@@ -148,6 +149,261 @@ paths:
       security:
         - ApiKeyAuth: []
         - BearerAuth: []
+  /airtime-cash/sessions:
+    post:
+      operationId: createAirtimeCashSession
+      summary: Start a session on a user's MTN line
+      description: >
+        Sends an OTP by SMS to the user's MTN number. Only call this after the user has agreed
+        to let your business move airtime from their line. Verify the code with
+        `/airtime-cash/sessions/{id}/verify`.
+      tags: [Airtime Cash]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSessionRequest' }
+            example:
+              msisdn: '08031234567'
+              consent: true
+              consent_ref: consent-2026-11-09-8841
+      responses:
+        '201':
+          description: OTP sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionStarted' }
+        '400':
+          description: Invalid number, or `consent` is not true.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many codes requested for this number. Wait and try again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+    get:
+      operationId: listAirtimeCashSessions
+      summary: List sessions
+      tags: [Airtime Cash]
+      responses:
+        '200':
+          description: Sessions opened by your business (stored credentials are never returned).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Session' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /airtime-cash/sessions/{id}/verify:
+    post:
+      operationId: verifyAirtimeCashSession
+      summary: Verify the OTP and activate the session
+      description: >
+        Once verified, OnePanel keeps the user's MTN login (encrypted) so later transfers need no
+        new OTP. Keep the returned `session_id` for that user.
+      tags: [Airtime Cash]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otp]
+              properties:
+                otp: { type: string, example: '123456' }
+      responses:
+        '200':
+          description: Session is active.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionStarted' }
+        '401':
+          description: Wrong code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: No pending session with this ID.
+        '410':
+          description: The code expired or too many wrong attempts were made. Start a new session.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /airtime-cash/sessions/{id}:
+    delete:
+      operationId: revokeAirtimeCashSession
+      summary: Revoke a session
+      description: Deletes the stored MTN login for this session immediately.
+      tags: [Airtime Cash]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Session revoked.
+        '404':
+          description: Session not found.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /airtime-cash/transfers:
+    post:
+      operationId: createAirtimeCashTransfer
+      summary: Move airtime from a user's line to your SIM
+      description: >
+        Sends airtime from the session's MTN line to your connected MTN SIM. Credit the user only
+        when `status` is `success` (or when you receive the `airtime_cash.transfer.success` webhook).
+        The user's 4-digit MTN transfer PIN must be sent with every request; it is never stored.
+        Repeating a `reference` never sends twice: you get the original result back.
+      tags: [Airtime Cash]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferRequest' }
+            example:
+              session_id: 3f1c2a9e-5b1d-4f0e-9a58-1d2b7c6e8a10
+              amount: 1000
+              pin: '1234'
+              reference: order-2026-0001
+      responses:
+        '200':
+          description: Airtime received (`status` is `success`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '202':
+          description: >
+            Result not confirmed yet (`status` is `pending` or `unknown`). Do not credit the user
+            and do not resend; check `GET /airtime-cash/transfers/{reference}`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '422':
+          description: >
+            Refused. Either MTN rejected the transfer (`status` is `failed`, `message` is MTN's own
+            reply, for example a wrong PIN), or the amount is over one of your limits.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '409':
+          description: >
+            The session is not usable. `session_status` is `reauth_required` or `expired`: ask the
+            user for a new OTP. Also returned when you have no connected MTN SIM to receive airtime.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many failed transfers on this session in the last hour.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+    get:
+      operationId: listAirtimeCashTransfers
+      summary: List transfers
+      tags: [Airtime Cash]
+      responses:
+        '200':
+          description: Your latest 200 transfers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transfers:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transfer' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /airtime-cash/transfers/{reference}:
+    get:
+      operationId: getAirtimeCashTransfer
+      summary: Get a transfer by your reference
+      tags: [Airtime Cash]
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The transfer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '404':
+          description: No transfer with this reference.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /airtime-cash/settings:
+    get:
+      operationId: getAirtimeCashSettings
+      summary: Get your spending limits
+      tags: [Airtime Cash]
+      responses:
+        '200':
+          description: Your limits and the platform ceilings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AirtimeCashSettings' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+    put:
+      operationId: updateAirtimeCashSettings
+      summary: Set your spending limits
+      description: >
+        Limits can also be set on the Airtime Cash page of the dashboard. Daily limits reset at
+        midnight Nigerian time.
+      tags: [Airtime Cash]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [max_per_transfer, max_daily_per_sim, max_daily_total, session_expiry_days]
+              properties:
+                max_per_transfer: { type: integer, example: 5000 }
+                max_daily_per_sim: { type: integer, example: 20000 }
+                max_daily_total: { type: integer, example: 200000 }
+                session_expiry_days: { type: integer, example: 30 }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AirtimeCashSettings' }
+        '400':
+          description: A value is outside the allowed range.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -207,6 +463,65 @@ components:
         ussd_code: { type: string }
         error_reason: { type: string, nullable: true }
         created_at: { type: string }
+    CreateSessionRequest:
+      type: object
+      required: [msisdn, consent]
+      properties:
+        msisdn: { type: string, description: The user's MTN number, example: '08031234567' }
+        consent: { type: boolean, description: Must be true. The user agreed to this access., example: true }
+        consent_ref: { type: string, maxLength: 128, description: Your own record of the user's consent. }
+    SessionStarted:
+      type: object
+      properties:
+        session_id: { type: string, example: 3f1c2a9e-5b1d-4f0e-9a58-1d2b7c6e8a10 }
+        status: { type: string, enum: [pending, active] }
+        msisdn: { type: string, example: '2348031234567' }
+        message: { type: string }
+    Session:
+      type: object
+      properties:
+        id: { type: string }
+        msisdn: { type: string }
+        status: { type: string, enum: [active, reauth_required, expired, revoked] }
+        consent_ref: { type: string, nullable: true }
+        created_at: { type: string }
+        last_used_at: { type: string, nullable: true }
+    TransferRequest:
+      type: object
+      required: [session_id, amount, pin, reference]
+      properties:
+        session_id: { type: string }
+        amount: { type: integer, description: Whole naira. Minimum 50., example: 1000 }
+        pin: { type: string, description: The user's 4-digit MTN airtime-transfer PIN. Never stored., example: '1234' }
+        reference: { type: string, maxLength: 64, description: Your unique reference. Repeating it never sends twice., example: order-2026-0001 }
+    Transfer:
+      type: object
+      properties:
+        success: { type: boolean }
+        transfer_id: { type: string, example: ACT_5d0c8b1e }
+        reference: { type: string, example: order-2026-0001 }
+        session_id: { type: string }
+        amount: { type: integer, example: 1000 }
+        status: { type: string, enum: [success, failed, pending, unknown] }
+        mtn_transaction_id: { type: string, nullable: true }
+        message: { type: string, nullable: true, description: MTN's own reply for this transfer. }
+        created_at: { type: string }
+    AirtimeCashSettings:
+      type: object
+      properties:
+        max_per_transfer: { type: integer, example: 5000 }
+        max_daily_per_sim: { type: integer, example: 20000 }
+        max_daily_total: { type: integer, example: 200000 }
+        session_expiry_days: { type: integer, example: 30 }
+        limits:
+          type: object
+          description: Platform ceilings you cannot raise a limit above.
+          properties:
+            min_transfer: { type: integer, example: 50 }
+            max_per_transfer: { type: integer, example: 50000 }
+            max_daily_per_sim: { type: integer, example: 100000 }
+            max_daily_total: { type: integer, example: 1000000 }
+            max_session_expiry_days: { type: integer, example: 90 }
     Error:
       type: object
       required: [message]
