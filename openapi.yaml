@@ -575,7 +575,7 @@ components:
         plan_id: { type: string, description: The plan's `id` from the catalogue., example: '1684' }
         recipient: { type: string, description: The Nigerian number that receives the data. `phone` is accepted as an alias., example: '08031234567' }
         reference: { type: string, maxLength: 128, description: Your unique ID for this purchase. Reusing it never buys twice. `customer_reference` and `idempotency_key` are accepted aliases., example: order-2026-0001 }
-        sim_id: { type: string, description: Optional connected SIM to use. If omitted, a SIM with enough airtime is chosen. }
+        sim_id: { type: string, description: 'Optional connected SIM to use. If omitted, a SIM with enough airtime is chosen.' }
     PurchaseResponse:
       type: object
       properties:
