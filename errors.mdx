@@ -19,9 +19,14 @@ Errors return a JSON object with a human-readable `message`:
 | `401` | Missing, invalid, revoked, or expired credentials. |
 | `402` | Insufficient wallet balance for the platform fee. |
 | `404` | The requested resource does not exist. |
+| `409` | A duplicate: the same plan was bought for the same number within 60 seconds, or a `reference` was already used. See [Buy data](/buy-data). |
 | `429` | Rate limit exceeded. Retry with backoff. |
 | `500` | Temporary server error. Retry only when the operation is safe to repeat. |
 
 <Warning>
   A timeout after a purchase request does not prove that the purchase failed. Check `/transactions` before retrying to avoid duplicate purchases.
 </Warning>
+
+## A purchase the carrier refused
+
+A purchase that MTN or Glo refuses returns `400` with a full purchase body (`success: false`, `status: "Failed"` and a `tx_id`), not just a `message`. The `message` is the carrier's own reply. See [Buy data](/buy-data).

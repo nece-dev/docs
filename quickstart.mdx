@@ -20,7 +20,7 @@ curl https://api.onepanel.ng/api/v1/networks
 ## 3. Fetch a current catalog
 
 ```bash
-curl "https://api.onepanel.ng/api/v1/bundles?carrier=mtn"
+curl "https://api.onepanel.ng/api/v1/data/plans?carrier=mtn"
 ```
 
 Use the returned `id` as the `plan_id` in a purchase request. Catalog IDs and prices can change.
@@ -34,9 +34,14 @@ curl -X POST https://api.onepanel.ng/api/v1/purchase \
   -d '{
     "carrier": "mtn",
     "plan_id": "1650",
-    "recipient": "07068765000"
+    "recipient": "07068765000",
+    "reference": "order-2026-0001"
   }'
 ```
+
+`reference` is optional but recommended. It must be unique per account. If a request times out, retrying with the same reference returns the original transaction instead of creating a second purchase.
+
+OnePanel can also call your server when a purchase succeeds or fails. See [Webhooks](/webhooks), and [Buy data](/buy-data) for every request field and response.
 
 Every successful purchase charges the configured flat platform fee of **₦2**. The account must have sufficient wallet balance and an active connected SIM for the selected carrier.
 

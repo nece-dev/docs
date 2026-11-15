@@ -66,11 +66,34 @@ paths:
       responses:
         '200':
           description: Available plan categories.
+  /data/plans:
+    get:
+      operationId: listDataPlans
+      summary: List data plans
+      description: Stable alias of `/bundles`. Use a plan's `id` as `plan_id` when you buy.
+      tags: [Catalog]
+      security: []
+      parameters:
+        - name: carrier
+          in: query
+          schema: { type: string, enum: [mtn, glo], example: mtn }
+      responses:
+        '200':
+          description: Available plans.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Bundle'
   /purchase:
     post:
       operationId: purchaseData
-      summary: Purchase data
-      description: Purchases a current catalog plan for a recipient through a connected SIM.
+      summary: Buy data
+      description: >
+        Buys a catalogue plan for a recipient through one of your connected SIMs. The plan sets the
+        price (any `amount` you send is ignored). Send a unique `reference` so a retry can never buy
+        twice. See the Buy data guide for the full flow.
       tags: [Purchases]
       requestBody:
         required: true
@@ -80,45 +103,153 @@ paths:
               $ref: '#/components/schemas/PurchaseRequest'
             example:
               carrier: mtn
-              plan_id: '1650'
-              recipient: '07068765000'
+              plan_id: '1684'
+              recipient: '08031234567'
+              reference: order-2026-0001
       responses:
         '200':
-          description: Purchase completed.
+          description: >
+            The data was delivered. Also returned when you repeat a `reference` whose first
+            purchase succeeded (the body then carries `idempotent: true`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PurchaseResponse' }
+              example:
+                success: true
+                status: Success
+                tx_id: TX_MTN_8F32A1BC
+                transaction_id: TX_MTN_8F32A1BC
+                reference: order-2026-0001
+                message: 'Successfully activated 3.2GB 2-Day Plan for +234 08031234567 (Ref: 88b3fa64-621f-59b8-9a3a-5f7782cc7ee5)'
+                ussd_fallback: '*312*1684#'
+        '400':
+          description: >
+            Either the request is invalid (the body is `{ "message": "..." }`), or the carrier
+            refused the purchase (the body is a full purchase response with `success: false`
+            and `status: Failed`; `message` is the carrier's own reply when the carrier refused it).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PurchaseResponse'
+                  - $ref: '#/components/schemas/Error'
+              examples:
+                carrierRefused:
+                  summary: The carrier refused the purchase
+                  value:
+                    success: false
+                    status: Failed
+                    tx_id: TX_MTN_C41D9E02
+                    transaction_id: TX_MTN_C41D9E02
+                    reference: order-2026-0001
+                    message: We couldn’t complete your request at the moment. Please try again
+                    ussd_fallback: '*312*1684#'
+                invalidRequest:
+                  summary: Invalid request
+                  value:
+                    message: plan_id is required
+        '401':
+          description: Missing, invalid or revoked API key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '402':
           description: Insufficient wallet balance for the platform fee.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: >
+            Either the same plan was bought for the same recipient in the last 60 seconds, or the
+            `reference` was already used for a purchase that did not succeed (the body then carries
+            `idempotent: true`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseResponse' }
+        '429':
+          description: Rate limit exceeded. Retry with backoff, using the same `reference`.
       security:
         - ApiKeyAuth: []
         - BearerAuth: []
   /data/purchase:
     post:
       operationId: purchaseDataAlias
-      summary: Purchase data using network ID
-      description: Alias of `/purchase` for integrations that use numeric network IDs and `phone`.
+      summary: Buy data (alias)
+      description: Identical to `POST /purchase`. Accepts `network_id` and `phone` as alternative field names.
       tags: [Purchases]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              allOf:
-                - $ref: '#/components/schemas/PurchaseRequest'
-                - type: object
-                  properties:
-                    network_id: { type: integer, example: 1 }
-                    phone: { type: string, example: '07068765000' }
+              $ref: '#/components/schemas/PurchaseRequest'
+            example:
+              network_id: 1
+              plan_id: '1684'
+              phone: '08031234567'
+              reference: order-2026-0001
       responses:
         '200':
-          description: Purchase completed.
+          description: >
+            The data was delivered. Also returned when you repeat a `reference` whose first
+            purchase succeeded (the body then carries `idempotent: true`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PurchaseResponse' }
+              example:
+                success: true
+                status: Success
+                tx_id: TX_MTN_8F32A1BC
+                transaction_id: TX_MTN_8F32A1BC
+                reference: order-2026-0001
+                message: 'Successfully activated 3.2GB 2-Day Plan for +234 08031234567 (Ref: 88b3fa64-621f-59b8-9a3a-5f7782cc7ee5)'
+                ussd_fallback: '*312*1684#'
+        '400':
+          description: >
+            Either the request is invalid (the body is `{ "message": "..." }`), or the carrier
+            refused the purchase (the body is a full purchase response with `success: false`
+            and `status: Failed`; `message` is the carrier's own reply when the carrier refused it).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PurchaseResponse'
+                  - $ref: '#/components/schemas/Error'
+              examples:
+                carrierRefused:
+                  summary: The carrier refused the purchase
+                  value:
+                    success: false
+                    status: Failed
+                    tx_id: TX_MTN_C41D9E02
+                    transaction_id: TX_MTN_C41D9E02
+                    reference: order-2026-0001
+                    message: We couldn’t complete your request at the moment. Please try again
+                    ussd_fallback: '*312*1684#'
+                invalidRequest:
+                  summary: Invalid request
+                  value:
+                    message: plan_id is required
+        '401':
+          description: Missing, invalid or revoked API key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '402':
+          description: Insufficient wallet balance for the platform fee.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: >
+            Either the same plan was bought for the same recipient in the last 60 seconds, or the
+            `reference` was already used for a purchase that did not succeed (the body then carries
+            `idempotent: true`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseResponse' }
+        '429':
+          description: Rate limit exceeded. Retry with backoff, using the same `reference`.
       security:
         - ApiKeyAuth: []
         - BearerAuth: []
@@ -437,19 +568,25 @@ components:
     PurchaseRequest:
       type: object
       required: [plan_id, recipient]
+      description: Send `carrier` or `network_id`, a `plan_id` and a `recipient`.
       properties:
-        carrier: { type: string, enum: [mtn, glo, airtel, 9mobile], example: mtn }
-        plan_id: { type: string, description: Current catalog plan ID, example: '1650' }
-        recipient: { type: string, description: Nigerian recipient phone number, example: '07068765000' }
-        sim_id: { type: string, description: Optional connected SIM ID }
+        carrier: { type: string, enum: [mtn, glo], description: The network. Required unless you send `network_id`., example: mtn }
+        network_id: { type: integer, description: 'Alternative to `carrier`: 1 = MTN, 2 = Glo. 3 (Airtel) and 4 (9mobile) are not supported yet.', example: 1 }
+        plan_id: { type: string, description: The plan's `id` from the catalogue., example: '1684' }
+        recipient: { type: string, description: The Nigerian number that receives the data. `phone` is accepted as an alias., example: '08031234567' }
+        reference: { type: string, maxLength: 128, description: Your unique ID for this purchase. Reusing it never buys twice. `customer_reference` and `idempotency_key` are accepted aliases., example: order-2026-0001 }
+        sim_id: { type: string, description: Optional connected SIM to use. If omitted, a SIM with enough airtime is chosen. }
     PurchaseResponse:
       type: object
       properties:
         success: { type: boolean, example: true }
-        tx_id: { type: string, example: TX_MTN_8F32A1BC }
-        transaction_id: { type: string, example: TX_MTN_8F32A1BC }
-        status: { type: string, example: Success }
-        message: { type: string, example: Bundle purchase successful }
+        status: { type: string, enum: [Success, Failed], example: Success }
+        tx_id: { type: string, description: OnePanel's transaction ID., example: TX_MTN_8F32A1BC }
+        transaction_id: { type: string, description: Same as `tx_id`., example: TX_MTN_8F32A1BC }
+        reference: { type: string, nullable: true, description: The reference you sent., example: order-2026-0001 }
+        message: { type: string, description: The result. For a carrier refusal this is the carrier's own reply., example: Successfully activated 3.2GB 2-Day Plan for +234 08031234567 }
+        ussd_fallback: { type: string, description: The USSD code that buys the same plan by hand., example: '*312*1684#' }
+        idempotent: { type: boolean, description: Present and true when this is the original result of a repeated `reference`. }
     Transaction:
       type: object
       properties:

@@ -1,0 +1,109 @@
+---
+title: Buy data
+description: Buy a data plan for any MTN or Glo number, with the exact request and every response.
+---
+
+Buying data is one call: pick a plan from the catalogue, then send the plan ID and the recipient's number. OnePanel delivers it through one of your connected SIMs and tells you the result.
+
+## 1. Choose a plan
+
+```bash
+curl "https://api.onepanel.ng/api/v1/data/plans?carrier=mtn"
+```
+
+Each plan has an `id`. You send that as `plan_id` when you buy. The plan decides the price, so you never send an amount.
+
+## 2. Buy it
+
+```bash
+curl -X POST https://api.onepanel.ng/api/v1/data/purchase \
+  -H "X-API-Key: qd_live_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "carrier": "mtn",
+    "plan_id": "1684",
+    "recipient": "08031234567",
+    "reference": "order-2026-0001"
+  }'
+```
+
+`POST /purchase` does the same thing. The two paths are interchangeable.
+
+### Request fields
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `carrier` | Yes, unless you send `network_id` | `mtn` or `glo`. |
+| `network_id` | Alternative to `carrier` | `1` for MTN, `2` for Glo. `3` (Airtel) and `4` (9mobile) are not supported yet. |
+| `plan_id` | Yes | The plan's `id` from the catalogue. |
+| `recipient` | Yes | The Nigerian number that receives the data. You can send it as `phone` instead. |
+| `reference` | Recommended | Your own unique ID for this purchase, up to 128 characters. Sending the same reference again never buys twice. You can also send it as `customer_reference` or `idempotency_key`. |
+| `sim_id` | No | Force a specific connected SIM. If you leave it out, OnePanel picks one that has enough airtime. |
+
+<Note>
+  Any `amount` you send is ignored. The price always comes from the plan in the catalogue.
+</Note>
+
+## Responses
+
+### Success: HTTP 200
+
+```json
+{
+  "success": true,
+  "status": "Success",
+  "tx_id": "TX_MTN_8F32A1BC",
+  "transaction_id": "TX_MTN_8F32A1BC",
+  "reference": "order-2026-0001",
+  "message": "Successfully activated 3.2GB 2-Day Plan for +234 08031234567 (Ref: 88b3fa64-621f-59b8-9a3a-5f7782cc7ee5)",
+  "ussd_fallback": "*312*1684#"
+}
+```
+
+The data has been delivered. `tx_id` is our ID for the transaction, and the same ID appears in your transaction list and in webhooks.
+
+### The carrier refused it: HTTP 400
+
+```json
+{
+  "success": false,
+  "status": "Failed",
+  "tx_id": "TX_MTN_C41D9E02",
+  "transaction_id": "TX_MTN_C41D9E02",
+  "reference": "order-2026-0001",
+  "message": "We couldn’t complete your request at the moment. Please try again",
+  "ussd_fallback": "*312*1684#"
+}
+```
+
+Nothing was delivered. When the failure came from MTN or Glo, `message` is **the carrier's own reply, word for word**, so you and your customer can see it was the provider that refused. When the cause was on our side (for example, none of your SIMs has enough airtime), the message says so. Your fee is refunded to your wallet.
+
+<Tip>
+  `ussd_fallback` is the USSD code the plan owner can dial on the SIM to buy the same plan by hand.
+</Tip>
+
+### Other responses
+
+| Status | When | Body |
+| --- | --- | --- |
+| `400` | The request is invalid: no `carrier` or `network_id`, no `plan_id`, a plan that doesn't exist for that carrier, or a `reference` longer than 128 characters. | `{ "message": "plan_id is required" }` |
+| `401` | The API key is missing, wrong or revoked. | `{ "message": "Missing or invalid authorization token" }` |
+| `402` | Your wallet can't cover the platform fee. Fund the wallet and retry. | `{ "message": "Insufficient wallet balance to cover the transaction fee. Please fund your wallet." }` |
+| `409` | You bought the same plan for the same number in the last 60 seconds. This stops accidental double purchases. | `{ "message": "You just purchased this same plan for this recipient…", "tx_id": "TX_MTN_…" }` |
+| `409` or `200` | You reused a `reference` (see below). | The original purchase, with `"idempotent": true`. |
+
+## Safe retries with `reference`
+
+Always send a `reference`. If your request times out or the connection drops, send the **same** request again with the **same** reference:
+
+- If the first attempt succeeded, you get HTTP **200** with the original transaction and `"idempotent": true`.
+- If it failed, you get HTTP **409** with the original transaction, also marked `"idempotent": true`. Use a new reference to try again.
+- If nothing was recorded, the purchase simply runs once.
+
+<Warning>
+  A timeout does not tell you the purchase failed. Retry with the same reference, or check `GET /transactions`, before sending a new reference. A new reference creates a second purchase.
+</Warning>
+
+## Get the result without polling
+
+OnePanel can call your server the moment a purchase succeeds or fails. See [Webhooks](/webhooks).

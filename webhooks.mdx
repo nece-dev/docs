@@ -1,0 +1,169 @@
+---
+title: Webhooks
+description: Get a signed call to your server when a purchase or airtime transfer finishes.
+---
+
+A webhook is a call OnePanel makes to your server when something finishes, so you don't have to keep asking. Every purchase triggers one when it succeeds or fails.
+
+## Set up an endpoint
+
+1. In the dashboard, open **Settings → Webhooks**.
+2. Add the URL of your endpoint. It must start with `https://` and point to a public address.
+3. Copy the **signing secret** shown when you save. You'll use it to check that calls really come from OnePanel.
+
+You can add more than one endpoint. Each one has its own signing secret, and every event is sent to all of them.
+
+<Check>
+  The full secret is shown when you create or rotate it. Viewing it again later needs a code we email you. You can also rotate it at any time from the same page.
+</Check>
+
+## What a call looks like
+
+OnePanel sends a `POST` with a JSON body and these headers:
+
+| Header | Value |
+| --- | --- |
+| `Content-Type` | `application/json` |
+| `X-OnePanel-Event` | The event name, for example `purchase.success`. |
+| `X-OnePanel-Signature` | `sha256=` followed by the signature of the body. See [Verify the signature](#verify-the-signature). |
+
+The body always has the same three parts:
+
+```json
+{
+  "event": "purchase.success",
+  "data": { },
+  "timestamp": "2026-11-15T09:30:12.123456+00:00"
+}
+```
+
+## Events
+
+### `purchase.success`
+
+A data purchase was delivered.
+
+```json
+{
+  "event": "purchase.success",
+  "data": {
+    "tx_id": "TX_MTN_8F32A1BC",
+    "reference": "order-2026-0001",
+    "carrier": "mtn",
+    "plan_name": "3.2GB 2-Day Plan",
+    "amount": "1000.00",
+    "recipient": "08031234567",
+    "status": "Success"
+  },
+  "timestamp": "2026-11-15T09:30:12.123456+00:00"
+}
+```
+
+### `purchase.failed`
+
+A data purchase did not go through. Nothing was delivered.
+
+```json
+{
+  "event": "purchase.failed",
+  "data": {
+    "tx_id": "TX_MTN_C41D9E02",
+    "reference": "order-2026-0002",
+    "carrier": "mtn",
+    "plan_name": "3.2GB 2-Day Plan",
+    "amount": "1000.00",
+    "recipient": "08031234567",
+    "status": "Failed",
+    "error_reason": "We couldn’t complete your request at the moment. Please try again"
+  },
+  "timestamp": "2026-11-15T09:31:40.552310+00:00"
+}
+```
+
+`error_reason` is the carrier's own wording when the carrier refused the purchase.
+
+### Fields in `data` for purchases
+
+| Field | Description |
+| --- | --- |
+| `tx_id` | OnePanel's transaction ID. Matches the `tx_id` returned by the purchase call. |
+| `reference` | The `reference` you sent, or `null` if you didn't send one. |
+| `carrier` | `mtn` or `glo`. |
+| `plan_name` | The plan that was bought. |
+| `amount` | The plan price in naira. |
+| `recipient` | The number the data was for. |
+| `status` | `Success` or `Failed`. |
+| `error_reason` | Only on `purchase.failed`. Why it failed. |
+
+### Airtime-for-cash events
+
+If you use [airtime for cash](/airtime-cash), you also get `airtime_cash.transfer.success`, `airtime_cash.transfer.failed` and `sim.reauth_required`. Their payloads are described on that page.
+
+## Verify the signature
+
+Anyone can post to your URL, so check every call before you trust it. The signature is an HMAC-SHA256 of the **raw request body**, using your endpoint's signing secret as the key, written as hex and prefixed with `sha256=`.
+
+<Warning>
+  Compute the signature over the raw bytes exactly as they arrived. If your framework parses the JSON first and you re-encode it, the bytes can change and the check will fail.
+</Warning>
+
+<CodeGroup>
+
+```js Node.js
+import crypto from 'node:crypto';
+
+// Express: use express.raw({ type: 'application/json' }) so req.body is the raw Buffer.
+export function isValid(rawBody, signatureHeader, secret) {
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signatureHeader || '');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+```
+
+```python Python
+import hashlib
+import hmac
+
+def is_valid(raw_body: bytes, signature_header: str, secret: str) -> bool:
+    expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header or "")
+```
+
+```php PHP
+<?php
+$rawBody = file_get_contents('php://input');
+$header = $_SERVER['HTTP_X_ONEPANEL_SIGNATURE'] ?? '';
+$expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
+
+if (!hash_equals($expected, $header)) {
+    http_response_code(401);
+    exit;
+}
+```
+
+</CodeGroup>
+
+## Respond quickly
+
+Reply with any `2xx` status as soon as you have received the call, then do your work. OnePanel waits **10 seconds** for an answer.
+
+- Any `2xx` counts as delivered.
+- OnePanel does not follow redirects.
+- Your endpoint must use `https://` and resolve to a public address. Private and internal addresses are refused.
+
+## Retries
+
+If your server doesn't answer, times out, or replies with `5xx`, `408` or `429`, OnePanel tries again. It makes up to **5 attempts in total**, waiting 30 seconds, then 2 minutes, then 10 minutes, then 1 hour between them.
+
+A `4xx` reply (other than 408 and 429) is treated as your server rejecting the event, so it is not retried. Pending retries survive our restarts and deployments.
+
+<Note>
+  Because of retries and refires, **the same event can reach you more than once**, and events can arrive out of order. Make your handler idempotent. Use `data.tx_id` together with `event` to spot a repeat.
+</Note>
+
+## See what was sent, and send it again
+
+Open **Webhook Logs** in the dashboard. Each delivery shows its event, the reference, the status your server returned, the exact payload and your server's response. Deliveries that are still waiting for an automatic retry show as "retrying".
+
+Use the **Refire** button on any row to send the same payload again right away. The call is signed with your endpoint's current secret and recorded as a new log entry, so the original stays in the history. A refire is not retried automatically.
