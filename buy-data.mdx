@@ -92,6 +92,10 @@ Nothing was delivered. When the failure came from MTN or Glo, `message` is **the
 | `409` | You bought the same plan for the same number in the last 60 seconds. This stops accidental double purchases. | `{ "message": "You just purchased this same plan for this recipient…", "tx_id": "TX_MTN_…" }` |
 | `409` or `200` | You reused a `reference` (see below). | The original purchase, with `"idempotent": true`. |
 
+## A success can be corrected afterwards
+
+For Glo, a `Success` answer means the order was accepted. OnePanel confirms it with Glo straight afterwards, and in the rare case Glo reports the order failed, the transaction changes to `Failed`, your fee is refunded, and you receive a `purchase.failed` [webhook](/webhooks). Use webhooks, or check `GET /transactions`, before you treat a purchase as final.
+
 ## Safe retries with `reference`
 
 Always send a `reference`. If your request times out or the connection drops, send the **same** request again with the **same** reference:

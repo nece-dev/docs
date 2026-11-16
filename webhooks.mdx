@@ -82,6 +82,14 @@ A data purchase did not go through. Nothing was delivered.
 
 `error_reason` is the carrier's own wording when the carrier refused the purchase.
 
+### A success can later be corrected
+
+For some carriers (currently Glo), the first answer only says the order was accepted. OnePanel then checks the order with the carrier, usually within seconds. If the carrier reports that the order failed, you get a `purchase.failed` for a purchase you were already told succeeded. At the same time the transaction changes to `Failed` and the platform fee is refunded to your wallet.
+
+<Warning>
+  Treat the **latest** event for a `tx_id` as the final result. Don't credit or deliver value to your customer on `purchase.success` alone if you can wait for the carrier's confirmation, and always handle a `purchase.failed` that follows a success.
+</Warning>
+
 ### Fields in `data` for purchases
 
 | Field | Description |
