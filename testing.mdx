@@ -1,0 +1,49 @@
+---
+title: Test mode
+description: Try the OnePanel API with simulated purchases and fake funds before going live.
+---
+
+Test mode is a sandbox that behaves like the live API without moving real airtime or money. Purchases are simulated, balances are fake, and every test record is kept separate from your live data.
+
+## How it works
+
+- **Test keys** start with `qd_test_` and only ever see sandbox data. **Live keys** start with `qd_live_` and only see live data. A key can never cross into the other mode.
+- Test wallets start with **₦50,000 in fake funds**. Top up more any time, or reset the sandbox to start over.
+- Test purchases validate exactly like live ones (known plan, fee covered) but never call a carrier and need no connected SIM.
+- Webhooks still fire for test purchases, with `"mode": "test"` in the payload — so you can test your receiver end to end.
+
+## Try it in the dashboard
+
+1. Flip the **Test mode** switch in the top bar. An amber banner confirms you are in the sandbox.
+2. Open the **Wallet** page to see your fake balance, top up, or reset the sandbox.
+3. Buy any plan from **Buy Data** — no SIM needed. Use a recipient ending in `0000` to simulate a carrier decline.
+4. Review the results under **Transactions** and **Webhook Logs**.
+
+## Use test keys in your integration
+
+Generate a test key under **Settings → API Keys → Test keys**, then call the API exactly as you would live:
+
+```bash
+curl https://api.onepanel.ng/api/v1/purchase \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: qd_test_YOUR_TEST_KEY" \
+  -d '{"carrier": "mtn", "plan_id": "1684", "recipient": "08031234567", "reference": "order-test-0001"}'
+```
+
+Test responses carry `"mode": "test"` and `"simulated": true`, and test transaction IDs start with `TST_`.
+
+<Note>
+  References are scoped per mode: you can reuse `order-test-0001` later as a live reference without colliding with your sandbox history.
+</Note>
+
+## Simulating failures
+
+To exercise your failure handling, send a test purchase to any recipient ending in `0000`. The API returns a simulated carrier decline (and refunds the fee, exactly like a real failure).
+
+## Resetting the sandbox
+
+`POST /wallet/test/reset` wipes your test purchases, test wallet history, and test webhook logs, then restores the starting fake balance. Live data is never touched. The dashboard exposes the same action as **Reset sandbox** on the Wallet page.
+
+## Going live
+
+When your integration works against the sandbox, generate a live key, fund your wallet, connect a SIM with airtime, and swap the key — your request code stays identical.

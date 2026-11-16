@@ -16,7 +16,7 @@
         "groups": [
           {
             "group": "Start here",
-            "pages": ["index", "quickstart", "authentication", "buy-data", "webhooks", "airtime-cash", "errors"]
+            "pages": ["index", "quickstart", "authentication", "testing", "buy-data", "webhooks", "airtime-cash", "errors"]
           },
           {
             "group": "API reference",

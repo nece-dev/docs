@@ -12,6 +12,7 @@ tags:
   - name: Transactions
   - name: Account
   - name: Airtime Cash
+  - name: Sandbox
 paths:
   /networks:
     get:
@@ -535,12 +536,68 @@ paths:
       security:
         - ApiKeyAuth: []
         - BearerAuth: []
+  /wallet/test/topup:
+    post:
+      operationId: topupTestWallet
+      summary: Add fake funds to the sandbox wallet
+      description: >
+        Credits the caller's test wallet with fake funds (default ₦10,000). Only reachable with a
+        `qd_test_` key — live keys are rejected.
+      tags: [Sandbox]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount_kobo: { type: integer, description: Kobo to add (1–100000000). Defaults to 1000000 (₦10,000)., example: 1000000 }
+      responses:
+        '200':
+          description: New sandbox balance.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestWallet' }
+        '400':
+          description: Called outside test mode, or the amount is out of range.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /wallet/test/reset:
+    post:
+      operationId: resetSandbox
+      summary: Clear sandbox data and restore test funds
+      description: >
+        Deletes the caller's test purchases, test wallet history, and test webhook logs, then
+        restores the ₦50,000 starting fake balance. Live data is never touched.
+      tags: [Sandbox]
+      responses:
+        '200':
+          description: Sandbox cleared.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestWallet' }
+        '400':
+          description: Called outside test mode.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
 components:
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-API-Key
+      description: >
+        Your OnePanel API key. `qd_live_...` keys access live data and make real purchases;
+        `qd_test_...` keys access the sandbox only, where purchases are simulated. Generate both
+        under Settings → API Keys in the dashboard.
     BearerAuth:
       type: http
       scheme: bearer
@@ -587,6 +644,8 @@ components:
         message: { type: string, description: The result. For a carrier refusal this is the carrier's own reply., example: Successfully activated 3.2GB 2-Day Plan for +234 08031234567 }
         ussd_fallback: { type: string, description: The USSD code that buys the same plan by hand., example: '*312*1684#' }
         idempotent: { type: boolean, description: Present and true when this is the original result of a repeated `reference`. }
+        mode: { type: string, enum: [live, test], description: Which partition this purchase belongs to. }
+        simulated: { type: boolean, description: True for sandbox purchases — no carrier call was made. }
     Transaction:
       type: object
       properties:
@@ -599,6 +658,7 @@ components:
         status: { type: string, enum: [Success, Failed] }
         ussd_code: { type: string }
         error_reason: { type: string, nullable: true }
+        mode: { type: string, enum: [live, test], description: Sandbox transactions are simulated. }
         created_at: { type: string }
     CreateSessionRequest:
       type: object
@@ -659,6 +719,13 @@ components:
             max_daily_per_sim: { type: integer, example: 100000 }
             max_daily_total: { type: integer, example: 1000000 }
             max_session_expiry_days: { type: integer, example: 90 }
+    TestWallet:
+      type: object
+      properties:
+        mode: { type: string, example: test }
+        message: { type: string }
+        balance: { type: string, example: '₦60000.00' }
+        balance_kobo: { type: integer, example: 6000000 }
     Error:
       type: object
       required: [message]

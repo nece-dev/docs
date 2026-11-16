@@ -23,6 +23,8 @@ Authorization: Bearer qd_live_your_api_key
 
 Create, list, and revoke keys from **Settings → API keys** in the OnePanel dashboard. Store keys as secrets and rotate them if they may have been exposed.
 
+Keys come in two types: **live keys** (`qd_live_...`) for real purchases, and **test keys** (`qd_test_...`) for the sandbox. A test key only ever sees test data — it cannot read or spend anything live. See [Test mode](/testing) for the full sandbox guide.
+
 <Check>
   API keys are hashed before storage. The complete raw key is only returned at creation time.
 </Check>
